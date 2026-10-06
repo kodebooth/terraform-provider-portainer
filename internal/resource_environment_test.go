@@ -114,6 +114,7 @@ func TestEnvironmentCreate_TypeEdgeAgent_HappyPath(t *testing.T) {
 	_ = d.Set("name", "edge-prod")
 	_ = d.Set("environment_address", "")
 	_ = d.Set("type", 4)
+	_ = d.Set("container_engine", "docker")
 
 	if err := rcCreate(r, d, mock.Client()); err != nil {
 		t.Fatalf("Create failed: %v", err)

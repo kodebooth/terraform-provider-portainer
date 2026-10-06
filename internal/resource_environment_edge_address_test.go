@@ -35,6 +35,7 @@ func edgeEnvDiff(t *testing.T, envType string, stateAddr, configAddr string) *te
 			"type":                envType,
 			"group_id":            "1",
 			"environment_address": stateAddr,
+			"container_engine":    "docker",
 		},
 	}
 	config := terraform.NewResourceConfigRaw(map[string]interface{}{
