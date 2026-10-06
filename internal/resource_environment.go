@@ -136,6 +136,26 @@ func resourceEnvironment() *schema.Resource {
 				},
 				Description: "Map of team IDs to role IDs (e.g. teamID -> roleID)",
 			},
+			"container_engine": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Default:     "docker",
+				Description: "Container engine used by the environment(endpoint). Value must be one of: 'docker' or 'podman'",
+				ValidateFunc: func(val interface{}, key string) (warns []string, errs []error) {
+					engine := val.(string)
+					if engine != "docker" && engine != "podman" {
+						errs = append(errs, fmt.Errorf("%q must be either %q or %q", key, "docker", "podman"))
+					}
+					return
+				},
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					if envType := d.Get("type").(int); envType != 4 {
+						// container_engine is not relevant unless type == 4
+						return true
+					}
+					return old == new
+				},
+			},
 		},
 	}
 }
@@ -162,16 +182,20 @@ func resourceEnvironmentCustomizeDiff(_ context.Context, d *schema.ResourceDiff,
 	if envType := d.Get("type").(int); envType != 4 && envType != 7 {
 		return nil
 	}
-	if !d.HasChange("environment_address") {
+	if !d.HasChange("environment_address") && !d.HasChange("container_engine") {
 		return nil
 	}
 
 	old, new := d.GetChange("environment_address")
-	if trimURLScheme(old.(string)) == trimURLScheme(new.(string)) {
-		return nil
+	if trimURLScheme(old.(string)) != trimURLScheme(new.(string)) {
+		return d.ForceNew("environment_address")
 	}
 
-	return d.ForceNew("environment_address")
+	if d.HasChange("container_engine") {
+		return d.ForceNew("container_engine")
+	}
+
+	return nil
 }
 
 // ensureEdgeID gives Edge Agent environments a usable edge_id when Portainer
@@ -230,12 +254,12 @@ func resourceEnvironmentCreate(ctx context.Context, d *schema.ResourceData, meta
 
 	// Edge Agent creation (type 4) is ambiguous on the Portainer side: without a
 	// container engine hint Portainer provisions the endpoint as a Kubernetes
-	// Edge Agent (type 7) instead of a Docker Edge Agent (type 4). Sending
-	// ContainerEngine=docker pins it to the Docker edge type the user asked for
-	// (issues #140 / #93). type 7 intentionally leaves it unset so Portainer
-	// keeps the Kubernetes edge type.
+	// Edge Agent (type 7) instead of a Docker or Podman Edge Agent (type 4).
+	// Sending ContainerEngine as podman or docker pins it to the edge type the
+	// user asked for (issues #140 / #93). type 7 intentionally leaves it unset
+	// so Portainer keeps the Kubernetes edge type.
 	if envType == 4 {
-		containerEngine := "docker"
+		containerEngine := d.Get("container_engine").(string)
 		params.SetContainerEngine(&containerEngine)
 	}
 
@@ -478,6 +502,10 @@ func resourceEnvironmentRead(ctx context.Context, d *schema.ResourceData, meta i
 		tagIDs = append(tagIDs, int(tid))
 	}
 	if err := d.Set("tag_ids", tagIDs); err != nil {
+		return diag.FromErr(err)
+	}
+
+	if err := d.Set("container_engine", resp.Payload.ContainerEngine); err != nil {
 		return diag.FromErr(err)
 	}
 

@@ -35,6 +35,7 @@ func edgeEnvDiff(t *testing.T, envType string, stateAddr, configAddr string) *te
 			"type":                envType,
 			"group_id":            "1",
 			"environment_address": stateAddr,
+			"container_engine":    "docker",
 		},
 	}
 	config := terraform.NewResourceConfigRaw(map[string]interface{}{
@@ -63,6 +64,35 @@ func TestEnvironmentDiff_EdgeAgentAddressChangeForcesReplacement(t *testing.T) {
 	}
 	if !diff.RequiresNew() {
 		t.Error("a real address change on an Edge Agent environment must force replacement")
+	}
+}
+
+func TestEnvironmentDiff_EdgeAgentContainerEngineChangeForcesReplacement(t *testing.T) {
+	r := resourceEnvironment()
+	state := &terraform.InstanceState{
+		ID: "30",
+		Attributes: map[string]string{
+			"id":                  "30",
+			"name":                "edge-prod",
+			"type":                "4",
+			"group_id":            "1",
+			"environment_address": "https://portainer.example.com",
+			"container_engine":    "docker",
+		},
+	}
+	config := terraform.NewResourceConfigRaw(map[string]interface{}{
+		"name":                "edge-prod",
+		"type":                "4",
+		"environment_address": "https://portainer.example.com",
+		"container_engine":    "podman",
+	})
+
+	diff, err := r.Diff(context.Background(), state, config, nil)
+	if err != nil {
+		t.Fatalf("Diff failed: %v", err)
+	}
+	if diff == nil || !diff.RequiresNew() {
+		t.Error("changing the container engine on an existing Edge Agent environment must force replacement")
 	}
 }
 
