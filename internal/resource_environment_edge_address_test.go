@@ -67,6 +67,35 @@ func TestEnvironmentDiff_EdgeAgentAddressChangeForcesReplacement(t *testing.T) {
 	}
 }
 
+func TestEnvironmentDiff_EdgeAgentContainerEngineChangeForcesReplacement(t *testing.T) {
+	r := resourceEnvironment()
+	state := &terraform.InstanceState{
+		ID: "30",
+		Attributes: map[string]string{
+			"id":                  "30",
+			"name":                "edge-prod",
+			"type":                "4",
+			"group_id":            "1",
+			"environment_address": "https://portainer.example.com",
+			"container_engine":    "docker",
+		},
+	}
+	config := terraform.NewResourceConfigRaw(map[string]interface{}{
+		"name":                "edge-prod",
+		"type":                "4",
+		"environment_address": "https://portainer.example.com",
+		"container_engine":    "podman",
+	})
+
+	diff, err := r.Diff(context.Background(), state, config, nil)
+	if err != nil {
+		t.Fatalf("Diff failed: %v", err)
+	}
+	if diff == nil || !diff.RequiresNew() {
+		t.Error("changing the container engine on an existing Edge Agent environment must force replacement")
+	}
+}
+
 // TestEnvironmentDiff_EdgeAgentSchemeOnlyDoesNotReplace guards the heuristic.
 // State written by an older provider version holds Portainer's host-only
 // normalisation, so it differs from the configured address by the scheme alone.

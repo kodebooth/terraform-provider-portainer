@@ -160,6 +160,39 @@ func TestEnvironmentCreate_TypeEdgeAgent_HappyPath(t *testing.T) {
 	}
 }
 
+func TestEnvironmentCreate_TypeEdgeAgent_Podman(t *testing.T) {
+	mock := NewMockServer(t)
+
+	mock.On("GET", "/endpoints", RespondJSON(http.StatusOK, []map[string]interface{}{}))
+	mock.On("POST", "/endpoints", RespondJSON(http.StatusOK, map[string]interface{}{
+		"Id": 10, "Name": "edge-podman", "Type": 4,
+	}))
+	mock.On("GET", "/endpoints/10", RespondJSON(http.StatusOK, map[string]interface{}{
+		"Id": 10, "Name": "edge-podman", "Type": 4, "GroupId": 1,
+		"ContainerEngine": "podman", "TagIds": []int{},
+	}))
+
+	r := resourceEnvironment()
+	d := r.TestResourceData()
+	_ = d.Set("name", "edge-podman")
+	_ = d.Set("environment_address", "")
+	_ = d.Set("type", 4)
+	_ = d.Set("container_engine", "podman")
+
+	if err := rcCreate(r, d, mock.Client()); err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	post := mock.FindRequest("POST", "/endpoints")
+	if post == nil {
+		t.Fatal("expected POST /endpoints to be sent")
+	}
+	body := string(post.Body)
+	if !strings.Contains(body, `name="ContainerEngine"`) || !strings.Contains(body, "\r\n\r\npodman\r\n") {
+		t.Errorf("expected ContainerEngine=podman in multipart body, body=%q", body)
+	}
+}
+
 // TestEnvironmentCreate_TypeEdgeAgent_GeneratesEdgeID is the regression test
 // for issue #142: Portainer only generates an Edge ID at creation when the
 // EnforceEdgeID setting is enabled, so both the create response and the
